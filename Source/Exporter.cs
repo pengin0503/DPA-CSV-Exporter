@@ -177,6 +177,22 @@ public static class Exporter
 
     private static string GameVersion()
     {
+        // Version.txt sits next to the shipped Windows or Linux game executable.
+        // Prefer this exact build identifier to a generic 1.7 label.
+        foreach (var baseFolder in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
+        {
+            try
+            {
+                string path = Path.Combine(baseFolder, "Version.txt");
+                if (File.Exists(path))
+                {
+                    var content = File.ReadAllText(path).Trim();
+                    if (!string.IsNullOrWhiteSpace(content)) return content;
+                }
+            }
+            catch (IOException) { /* try the runtime API */ }
+            catch (UnauthorizedAccessException) { /* try the runtime API */ }
+        }
         // The RimWorld 1.7 runtime's version API may differ from older assemblies.
         // Never record a guessed release string as though it were the exact build.
         var candidates = new[] {
