@@ -9,7 +9,7 @@ namespace DpaCsvExporter;
 /// <summary>Inject a single export button into the Dubs Performance Analyzer window.</summary>
 public sealed class DpaCsvExporterMod : Mod
 {
-    private string status = "Select a profiler entry in Dubs Performance Analyzer, then export all rows.";
+    private static string lastStatus = "No export attempted yet. Select a profiler entry, then export all rows.";
 
     public DpaCsvExporterMod(ModContentPack content) : base(content)
     {
@@ -45,16 +45,19 @@ public sealed class DpaCsvExporterMod : Mod
             "CSV folder: RimWorld user data / AnalyzerExports");
         if (Widgets.ButtonText(new Rect(inner.x, inner.y + 75f, 250f, 34f), "Export all current measurements"))
             ExportWithFeedback();
-        Widgets.Label(new Rect(inner.x, inner.y + 125f, inner.width, 75f), status);
+        Widgets.Label(new Rect(inner.x, inner.y + 125f, inner.width, Math.Max(90f, inner.height - 130f)), lastStatus);
     }
 
     // Harmony postfix to an existing window; never patch the measured code paths.
-    public static void DrawExportButton(Rect rect)
+    public static void DrawExportButton(Rect inRect)
     {
         try
         {
-            // Clear the native close control; title-bar height is ~18 px.
-            var button = new Rect(rect.xMax - 195f, rect.y + 1f, 118f, 18f);
+            // Dubs uses the entire title strip (except its close button) for dragging.
+            // Place the export action below the title, near the foot of the left tabs.
+            // Keep the full-width analyzer search, TPS/FPS fields and draggable header clear.
+            if (inRect.width < 210f || inRect.height < 110f) return;
+            var button = new Rect(inRect.x + 24f, inRect.yMax - 48f, 168f, 25f);
             if (Widgets.ButtonText(button, "Export CSV"))
                 ExportWithFeedback();
         }
@@ -69,12 +72,14 @@ public sealed class DpaCsvExporterMod : Mod
         try
         {
             var path = Exporter.ExportCurrent();
+            lastStatus = "Saved: " + path;
             Log.Message("[DPA CSV Exporter] Saved: " + path);
             Messages.Message("DPA CSV saved: " + System.IO.Path.GetFileName(path),
                 MessageTypeDefOf.TaskCompletion, false);
         }
         catch (Exception e)
         {
+            lastStatus = "Export failed: " + e.Message;
             Log.Warning("[DPA CSV Exporter] Export failed: " + e);
             Messages.Message("DPA CSV export failed: " + e.Message,
                 MessageTypeDefOf.RejectInput, false);
