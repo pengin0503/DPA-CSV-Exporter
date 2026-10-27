@@ -19,4 +19,32 @@ foreach (double n in new[] { 1e-10, -1e-12, Math.PI, 0.00000000012345678, -12345
     Equal(n.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
           parsed.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
 }
-Console.WriteLine("CSV serialization + round-trip precision tests passed");
+// A failed export must not leave a final *.csv file.
+var exportDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "dpa-csv-test-" + Guid.NewGuid().ToString("N"));
+System.IO.Directory.CreateDirectory(exportDir);
+try
+{
+    var finalPath = System.IO.Path.Combine(exportDir, "result.csv");
+    bool threw = false;
+    try
+    {
+        AtomicFile.Write(finalPath, writer =>
+        {
+            writer.WriteLine("incomplete");
+            throw new System.IO.IOException("simulated write failure");
+        });
+    }
+    catch (System.IO.IOException) { threw = true; }
+    if (!threw || System.IO.File.Exists(finalPath))
+        throw new Exception("Atomic export should fail without leaving an incomplete result");
+    if (System.IO.Directory.GetFiles(exportDir).Length != 0)
+        throw new Exception("Atomic export should remove failed temp file");
+
+    AtomicFile.Write(finalPath, writer => writer.WriteLine("complete"));
+    Equal("complete", System.IO.File.ReadAllText(finalPath).TrimStart('\uFEFF').Trim());
+}
+finally
+{
+    System.IO.Directory.Delete(exportDir, true);
+}
+Console.WriteLine("CSV precision and atomic file regression tests passed");
