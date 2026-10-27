@@ -47,4 +47,20 @@ finally
 {
     System.IO.Directory.Delete(exportDir, true);
 }
-Console.WriteLine("CSV precision and atomic file regression tests passed");
+// Validate all fields and rows of the full CSV document independently of the game.
+if (CsvReport.Columns.Count != 29) throw new Exception("Expected exactly 29 CSV columns");
+var first = Enumerable.Repeat<string?>("", 29).ToArray();
+var second = Enumerable.Repeat<string?>("", 29).ToArray();
+first[12] = "method,with,commas"; first[18] = "1.5"; first[10] = "1";
+second[12] = "another"; second[18] = "2.5"; second[10] = "2";
+using (var sw = new System.IO.StringWriter())
+{
+    CsvReport.Write(sw, new[] { first, second });
+    var lines = sw.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+    if (lines.Length != 3) throw new Exception("Header plus 2 measurement rows expected");
+    if (!lines[0].StartsWith("timestamp_utc,rimworld_version,category,"))
+        throw new Exception("Unexpected report header");
+    if (!lines[1].Contains("\"method,with,commas\"") || !lines[2].Contains("another"))
+        throw new Exception("Report must retain every row and quote text correctly");
+}
+Console.WriteLine("CSV precision, atomic file and full document tests passed");
