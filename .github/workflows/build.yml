@@ -78,15 +78,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # An existing release is immutable: never replace another source build.
-          if gh release view v1.0.2 --json tagName >/dev/null 2>&1; then
-            tag_commit="$(gh release view v1.0.2 --json targetCommitish --jq .targetCommitish)"
-            if [ "$tag_commit" != "$GITHUB_SHA" ]; then
-              echo "v1.0.2 already exists for another source commit; bump the version for a new release."
-              exit 1
-            fi
-          else
+          # --target does not move an existing tag. Resolve lightweight and
+          # annotated remote tags, and refuse a different source commit.
+          release_commit() {
+            git ls-remote origin 'refs/tags/v1.0.2' 'refs/tags/v1.0.2^{}' |
+              awk 'NR == 1 { sha = $1 } /\^\{\}$/ { sha = $1 } END { print sha }'
+          }
+          tag_commit="$(release_commit)"
+          if [ -n "$tag_commit" ] && [ "$tag_commit" != "$GITHUB_SHA" ]; then
+            echo "v1.0.2 points to another source commit; refusing to publish."
+            exit 1
+          fi
+          if ! gh release view v1.0.2 --json tagName >/dev/null 2>&1; then
             gh release create v1.0.2 dist/DPA-CSV-Exporter-1.0.2-RW1.7.zip \
               --target "$GITHUB_SHA" --title "DPA CSV Exporter 1.0.2 — reliable export button" \
               --notes-file RELEASE_NOTES.md
           fi
+          test "$(release_commit)" = "$GITHUB_SHA"
+          test "$(gh release view v1.0.2 --json isDraft --jq .isDraft)" = false
+          # A draft or missing/broken asset must not count as a published ZIP.
+          gh release download v1.0.2 --pattern DPA-CSV-Exporter-1.0.2-RW1.7.zip \
+            --dir "$RUNNER_TEMP/published-release"
+          published="$RUNNER_TEMP/published-release/DPA-CSV-Exporter-1.0.2-RW1.7.zip"
+          unzip -t "$published"
+          unzip -p "$published" DPA-CSV-Exporter/1.7/Assemblies/DPA.CsvExporter.dll |
+            sha256sum | cut -d' ' -f1 > "$RUNNER_TEMP/published-dll.sha"
+          diff "$RUNNER_TEMP/published-dll.sha" "$RUNNER_TEMP/built-dll.sha"
