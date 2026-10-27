@@ -48,7 +48,7 @@ finally
     System.IO.Directory.Delete(exportDir, true);
 }
 // Validate all fields and rows of the full CSV document independently of the game.
-if (CsvReport.Columns.Count != 29) throw new Exception("Expected exactly 29 CSV columns");
+if (CsvReport.Columns.Length != 29) throw new Exception("Expected exactly 29 CSV columns");
 var first = Enumerable.Repeat<string?>("", 29).ToArray();
 var second = Enumerable.Repeat<string?>("", 29).ToArray();
 first[12] = "method,with,commas"; first[18] = "1.5"; first[10] = "1";
