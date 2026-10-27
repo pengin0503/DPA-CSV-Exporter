@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   tests:
-    name: CSV formatting and atomic file tests
+    name: CSV and GUI regression tests
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -47,14 +47,15 @@ jobs:
           cp About/About.xml "$stage/About/"
           cp 1.7/Assemblies/DPA.CsvExporter.dll "$stage/1.7/Assemblies/"
           cp README.md "$stage/"
-          ( cd "$RUNNER_TEMP/release" && zip -q -r "$GITHUB_WORKSPACE/DPA-CSV-Exporter-1.0.1-RW1.7.zip" DPA-CSV-Exporter )
-          unzip -t DPA-CSV-Exporter-1.0.1-RW1.7.zip
-          ! unzip -Z1 DPA-CSV-Exporter-1.0.1-RW1.7.zip | grep -E 'Assembly-CSharp\.dll|UnityStubs\.dll|Waylith\.dll|0Harmony\.dll|PerformanceAnalyzer\.dll'
-          unzip -p DPA-CSV-Exporter-1.0.1-RW1.7.zip DPA-CSV-Exporter/1.7/Assemblies/DPA.CsvExporter.dll | sha256sum
-          sha256sum 1.7/Assemblies/DPA.CsvExporter.dll
+          ( cd "$RUNNER_TEMP/release" && zip -q -r "$GITHUB_WORKSPACE/DPA-CSV-Exporter-1.0.2-RW1.7.zip" DPA-CSV-Exporter )
+          unzip -t DPA-CSV-Exporter-1.0.2-RW1.7.zip
+          ! unzip -Z1 DPA-CSV-Exporter-1.0.2-RW1.7.zip | grep -E 'Assembly-CSharp\.dll|UnityStubs\.dll|Waylith\.dll|0Harmony\.dll|PerformanceAnalyzer\.dll'
+          unzip -p DPA-CSV-Exporter-1.0.2-RW1.7.zip DPA-CSV-Exporter/1.7/Assemblies/DPA.CsvExporter.dll | sha256sum | cut -d' ' -f1 > "$RUNNER_TEMP/zip-dll.sha"
+          sha256sum 1.7/Assemblies/DPA.CsvExporter.dll | cut -d' ' -f1 > "$RUNNER_TEMP/built-dll.sha"
+          diff "$RUNNER_TEMP/zip-dll.sha" "$RUNNER_TEMP/built-dll.sha"
       - uses: actions/upload-artifact@v4
         with:
-          name: DPA-CSV-Exporter-1.0.1-PR
-          path: DPA-CSV-Exporter-1.0.1-RW1.7.zip
+          name: DPA-CSV-Exporter-1.0.2-PR
+          path: DPA-CSV-Exporter-1.0.2-RW1.7.zip
           if-no-files-found: error
           retention-days: 14

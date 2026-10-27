@@ -17,8 +17,9 @@ namespace Verse
 {
     using UnityEngine;
     public class ModContentPack { }
-    public class Mod(ModContentPack content)
+    public class Mod
     {
+        public Mod(ModContentPack content) { _ = content; }
         public virtual string SettingsCategory() => "";
         public virtual void DoSettingsWindowContents(Rect rect) { }
     }
