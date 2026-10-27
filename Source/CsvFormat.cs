@@ -28,6 +28,6 @@ public static class CsvFormat
 
     public static string Number(double value)
         => double.IsNaN(value) || double.IsInfinity(value)
-            ? "" : value.ToString("0.#########", CultureInfo.InvariantCulture);
+            ? "" : value.ToString("R", CultureInfo.InvariantCulture);
     public static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
 }
