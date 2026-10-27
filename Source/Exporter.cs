@@ -18,18 +18,6 @@ public static class Exporter
 {
     private const BindingFlags StaticPublic = BindingFlags.Public | BindingFlags.Static;
     private const BindingFlags InstancePublic = BindingFlags.Public | BindingFlags.Instance;
-    private static readonly string[] Header = {
-        "timestamp_utc", "rimworld_version", "category", "entry", "search_filter",
-        "fps", "tps", "tps_target", "root_average_ms", "measurement_cycles", "rank",
-        "key", "label", "mod", "assembly", "declaring_type", "method",
-        "sample_entries", "average_ms_per_cycle", "self_ms_per_cycle", "max_ms_per_cycle",
-        "total_ms", "total_calls", "calls_per_cycle", "fraction_of_root", "spike_count",
-        "spike_severity", "phase_flags", "pinned"
-    };
-    private static readonly HashSet<int> Numeric = new() {
-        5,6,7,8,9,10,17,18,19,20,21,22,23,24,25,26,27,28
-    };
-
     private sealed class Row
     {
         public string Key = "", Label = "", Mod = "", Assembly = "", Type = "", Method = "";
@@ -134,9 +122,7 @@ public static class Exporter
         string path = Path.Combine(folder, fileName);
 
         string gameVersion = GameVersion();
-        AtomicFile.Write(path, writer =>
-        {
-            writer.WriteLine(CsvFormat.Line(Header));
+        var csvRows = new List<string?[]>(rows.Count);
         for (int i = 0; i < rows.Count; i++)
         {
             var row = rows[i];
@@ -153,9 +139,9 @@ public static class Exporter
                 CsvFormat.Number(row.Severity), CsvFormat.Number(row.Phase),
                 row.Pinned ? "1" : "0"
             };
-            writer.WriteLine(CsvFormat.Line(fields, Numeric));
+            csvRows.Add(fields);
         }
-        });
+        AtomicFile.Write(path, writer => CsvReport.Write(writer, csvRows));
         return path;
     }
 
