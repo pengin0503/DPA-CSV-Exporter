@@ -18,18 +18,6 @@ public static class Exporter
 {
     private const BindingFlags StaticPublic = BindingFlags.Public | BindingFlags.Static;
     private const BindingFlags InstancePublic = BindingFlags.Public | BindingFlags.Instance;
-    private static readonly string[] Header = {
-        "timestamp_utc", "rimworld_version", "category", "entry", "search_filter",
-        "fps", "tps", "tps_target", "root_average_ms", "measurement_cycles", "rank",
-        "key", "label", "mod", "assembly", "declaring_type", "method",
-        "sample_entries", "average_ms_per_cycle", "self_ms_per_cycle", "max_ms_per_cycle",
-        "total_ms", "total_calls", "calls_per_cycle", "fraction_of_root", "spike_count",
-        "spike_severity", "phase_flags", "pinned"
-    };
-    private static readonly HashSet<int> Numeric = new() {
-        5,6,7,8,9,10,17,18,19,20,21,22,23,24,25,26,27,28
-    };
-
     private sealed class Row
     {
         public string Key = "", Label = "", Mod = "", Assembly = "", Type = "", Method = "";
@@ -73,19 +61,24 @@ public static class Exporter
         var sync = Static(analyzer, "LogicLock")
                    ?? throw new InvalidOperationException("Dubs Analyzer.LogicLock not found.");
         var rows = new List<Row>();
-        var modMap = ModAssemblyNames();
 
-        // DPA swaps its entire log collection from a worker while holding this lock.
-        // Do not hold references to mutable ProfileLog instances after leaving the lock.
+        // DPA publishes a fresh List<ProfileLog> under LogicLock. Copy its object
+        // references while locked; do all reflection and method stringification
+        // after releasing the lock so export doesn't stall analyzer updates.
+        object[] sampledLogs;
         lock (sync)
         {
             var logs = Static(analyzer, "Logs") as IEnumerable
                        ?? throw new InvalidOperationException("Dubs Analyzer.Logs not found.");
-            foreach (object? item in logs)
-            {
+            sampledLogs = logs.Cast<object>().Where(item => item != null).ToArray();
+        }
+        var modMap = ModAssemblyNames();
+        foreach (object item in sampledLogs)
+        {
                 if (item == null) continue;
                 var method = Field(item, "meth") as MethodBase;
-                var type = Field(item, "type") as Type ?? method?.DeclaringType;
+                // A profiler wrapper type is not necessarily the measured method's owner.
+                var type = method?.DeclaringType ?? Field(item, "type") as Type;
                 string assFull = type?.Assembly.FullName ?? "";
                 string mod = "";
                 if (assFull.Length > 0 && modMap.TryGetValue(assFull, out var known))
@@ -108,7 +101,6 @@ public static class Exporter
                     Phase = Int(Field(item, "seenIn")),
                     Pinned = Field(item, "pinned") is true
                 });
-            }
         }
         if (rows.Count == 0)
             throw new InvalidOperationException("No measurements yet. Start Dubs profiling and retry.");
@@ -129,13 +121,13 @@ public static class Exporter
             + "_" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".csv";
         string path = Path.Combine(folder, fileName);
 
-        using var writer = new StreamWriter(path, false, new UTF8Encoding(true));
-        writer.WriteLine(CsvFormat.Line(Header));
+        string gameVersion = GameVersion();
+        var csvRows = new List<string?[]>(rows.Count);
         for (int i = 0; i < rows.Count; i++)
         {
             var row = rows[i];
             string?[] fields = {
-                timestamp, "1.7", category, entryName, filter,
+                timestamp, gameVersion, category, entryName, filter,
                 CsvFormat.Number(fps), CsvFormat.Number(tps), CsvFormat.Number(tpsTarget),
                 CsvFormat.Number(rootAverage), CsvFormat.Number(cycles), CsvFormat.Number(i+1),
                 row.Key, row.Label, row.Mod, row.Assembly, row.Type, row.Method,
@@ -147,8 +139,9 @@ public static class Exporter
                 CsvFormat.Number(row.Severity), CsvFormat.Number(row.Phase),
                 row.Pinned ? "1" : "0"
             };
-            writer.WriteLine(CsvFormat.Line(fields, Numeric));
+            csvRows.Add(fields);
         }
+        AtomicFile.Write(path, writer => CsvReport.Write(writer, csvRows));
         return path;
     }
 
@@ -166,6 +159,46 @@ public static class Exporter
                 if (assembly.FullName != null && !mapping.ContainsKey(assembly.FullName))
                     mapping[assembly.FullName] = mod.Name;
         return mapping;
+    }
+
+    private static string GameVersion()
+    {
+        // Version.txt sits next to the shipped Windows or Linux game executable.
+        // Prefer this exact build identifier to a generic 1.7 label.
+        foreach (var baseFolder in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
+        {
+            try
+            {
+                string path = Path.Combine(baseFolder, "Version.txt");
+                if (File.Exists(path))
+                {
+                    var content = File.ReadAllText(path).Trim();
+                    if (!string.IsNullOrWhiteSpace(content)) return content;
+                }
+            }
+            catch (IOException) { /* try the runtime API */ }
+            catch (UnauthorizedAccessException) { /* try the runtime API */ }
+        }
+        // The RimWorld 1.7 runtime's version API may differ from older assemblies.
+        // Never record a guessed release string as though it were the exact build.
+        var candidates = new[] {
+            "Verse.VersionControl",
+            "RimWorld.VersionControl",
+            "Verse.VersionInfo"
+        };
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var name in candidates)
+            {
+                var type = assembly.GetType(name, false);
+                if (type == null) continue;
+                var value = Static(type, "CurrentVersionString")
+                            ?? Static(type, "CurrentVersionStringWithRev")
+                            ?? Static(type, "CurrentVersionStringWithoutBuild")
+                            ?? Static(type, "CurrentVersion");
+                var text = Str(value);
+                if (text.Length > 0) return text;
+            }
+        return "unknown";
     }
 
     private static string SafeName(string text)
