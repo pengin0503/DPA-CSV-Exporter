@@ -2,11 +2,11 @@
 
 An independent addon for **Dubs Performance Analyzer** that exports the **entire current profiling table** in one CSV file, including rows hidden by the Dubs search filter. It does not start extra profiling or modify game behavior.
 
-**Status:** The source includes newer review fixes than the checked-in `1.7/Assemblies/` DLL and `dist/` ZIP. **Those binary files still contain the original pre-review build** and must not be described as incorporating the new fixes. The full RimWorld 1.7 compilation and in-game button/CSV behavior of the updated source remain unverified. The independent .NET CSV regression tests pass.
+**Status:** The source is built against the public RimRef 1.7.4985 signature package without Cloudflare R2 credentials. The checked-in DLL and ZIP are updated by the main-branch build workflow **only after successful compilation and packaging**. Windows in-game UI/CSV operation remains unverified.
 
 ## Installation
 
-Download `dist/DPA-CSV-Exporter-1.0.0-RW1.7.zip` from this repository. Unzip and place its `DPA-CSV-Exporter` folder in the RimWorld `Mods` directory. Requires RimWorld 1.7, Harmony, and Dubs Performance Analyzer (load in that order before this addon).
+Download `dist/DPA-CSV-Exporter-1.0.1-RW1.7.zip` from this repository. Unzip and place its `DPA-CSV-Exporter` folder in the RimWorld `Mods` directory. Requires RimWorld 1.7, Harmony, and Dubs Performance Analyzer (load in that order before this addon).
 
 1. Open Dubs Performance Analyzer.
 2. Select a Tick, Update, GUI or other profiling entry and allow measurements to accumulate.
@@ -23,23 +23,23 @@ Each CSV contains 29 columns: category, selected entry, FPS/TPS, measured call c
 - `Tests/`: CSV formatting tests.
 - `1.7/Assemblies/`: compiled and redistributable addon DLL (no game, Harmony, or Dubs DLL bundled).
 - `dist/`: ready-to-install ZIP archive.
-- `.github/workflows/pr-checks.yml`: runs CSV regression tests for each PR. The full game-DLL compilation runs **only if this repository** has GitHub Actions repository secrets `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and repository variable `R2_ENDPOINT`. Without them, compilation is explicitly skipped even when the other CI checks are green.
-- `.github/workflows/build.yml`: optional, manually triggered build with the same private R2 references. No R2-heavy CI runs are needed for a CSV-only test.
+- `.github/workflows/pr-checks.yml`: runs CSV regression tests and compiles a test ZIP using `Krafs.Rimworld.Ref` from NuGet on pull requests. No R2 access required.
+- `.github/workflows/build.yml`: on main source changes or manual dispatch, runs tests, compiles and validates the 1.0.1 ZIP, then commits only the self-authored DLL and ZIP to the repo. No R2 access required.
 
 Local development:
 
 ```sh
 dotnet run --project Tests/CsvSmokeTest.csproj -c Release
-dotnet build Source/DPA.CsvExporter.csproj -c Release -p:RimWorldRefs=/private/RimWorld1.7/refs
+dotnet build Source/DPA.CsvExporter.csproj -c Release
 ```
 
-The compile references must be `Assembly-CSharp.dll`, `UnityStubs.dll`, and `Waylith.dll` from an authorized RimWorld 1.7 installation; these proprietary files are **not** tracked or packaged here.
+The compiler restores the Ludeon-authorized, signature-only `Krafs.Rimworld.Ref` 1.7.4985 NuGet package. The actual game binaries are **not** tracked or packaged here.
 
-Built from the [DPA CSV Exporter focused-build run](https://github.com/pengin0503/RimWorld-for-mod-test/actions/runs/40447166070). The unrelated test-only RimWorld host is not required to run this addon.
+The original v1.0.0 build came from a prior CI run in a separate repository. Current source and v1.0.1 builds use no game files or R2 credentials.
 
 ## Review fixes and release boundaries
 
 - The CSV exporter serializes complete current-entry measurement rows using `CsvReport.Write`, and writes atomically via `AtomicFile`.
 - Tests cover precision, a multi-row 29-column CSV report and failed file writes, and pass in the independent .NET 10 GitHub Actions job.
-- Important: the `dist/` ZIP is from before these source changes. A green CSV test check is not proof that the game's addon is compiled or playable.
-- Rebuilding requires `RimWorldRefs` to point to privately held, authorized RimWorld 1.7 references. Do not commit or upload those references.
+- The v1.0.1 `dist/` ZIP is published by the main-branch build workflow after a .NET compiler success. This does not prove that the addon UI functions in a running game.
+- Rebuilding uses publicly available metadata-only NuGet references. Do not commit or upload proprietary game DLLs.

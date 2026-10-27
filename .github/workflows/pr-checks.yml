@@ -1,17 +1,14 @@
-name: PR checks — DPA CSV Exporter
-
+name: PR checks - DPA CSV Exporter
 on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
-  csv-tests:
-    name: CSV serializer, precision, atomic writes
+  tests:
+    name: CSV formatting and atomic file tests
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -21,19 +18,12 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Run regression tests (does not access Cloudflare)
-        run: dotnet run --project Tests/CsvSmokeTest.csproj -c Release
-
-  game-build:
-    name: RimWorld 1.7 compile if R2 credentials available
-    needs: csv-tests
+      - run: dotnet run --project Tests/CsvSmokeTest.csproj -c Release
+  compile:
+    name: Build addon against public RimRef signatures (no R2)
+    needs: tests
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: auto
-      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,57 +31,29 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Check whether private build is configured
-        id: check
-        shell: bash
-        run: |
-          if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$AWS_SECRET_ACCESS_KEY" ] && [ -n "$R2_ENDPOINT" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::RimWorld DLL compile skipped: repository R2 secrets / variable are not configured."
-            echo "### RimWorld build not performed" >> "$GITHUB_STEP_SUMMARY"
-            echo "Only game-independent tests are verified. For the game build, configure R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY repository secrets, and R2_ENDPOINT variable." >> "$GITHUB_STEP_SUMMARY"
-          fi
-      - name: Retrieve 3 compile-only DLLs from private R2
-        if: steps.check.outputs.ready == 'true'
+      - name: Compile and verify DLL
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/rimworld-refs"
-          for dll in Assembly-CSharp.dll UnityStubs.dll Waylith.dll; do
-            aws --endpoint-url "$R2_ENDPOINT" --region auto s3api get-object --bucket rimworld-17 \
-              --key "Game-Linux/$dll" "$RUNNER_TEMP/rimworld-refs/$dll" > /dev/null
-            test -s "$RUNNER_TEMP/rimworld-refs/$dll"
-          done
-      - name: Compile addon against RimWorld 1.7 references
-        if: steps.check.outputs.ready == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          dotnet build Source/DPA.CsvExporter.csproj -c Release --nologo \
-            -p:RimWorldRefs="$RUNNER_TEMP/rimworld-refs"
+          dotnet build Source/DPA.CsvExporter.csproj -c Release --nologo
           test -s 1.7/Assemblies/DPA.CsvExporter.dll
-      - name: Package updated addon (never bundle reference DLLs)
-        if: steps.check.outputs.ready == 'true'
+      - name: Package and verify self-authored code only
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/release/DPA-CSV-Exporter/About"
-          mkdir -p "$RUNNER_TEMP/release/DPA-CSV-Exporter/1.7/Assemblies"
-          cp About/About.xml "$RUNNER_TEMP/release/DPA-CSV-Exporter/About/"
-          cp 1.7/Assemblies/DPA.CsvExporter.dll "$RUNNER_TEMP/release/DPA-CSV-Exporter/1.7/Assemblies/"
-          cp README.md "$RUNNER_TEMP/release/DPA-CSV-Exporter/"
-          ( cd "$RUNNER_TEMP/release" && zip -q -r "$GITHUB_WORKSPACE/DPA-CSV-Exporter-PR.zip" DPA-CSV-Exporter )
-          ! unzip -Z1 DPA-CSV-Exporter-PR.zip | grep -E 'Assembly-CSharp|UnityStubs|Waylith|0Harmony|PerformanceAnalyzer'
+          stage="$RUNNER_TEMP/release/DPA-CSV-Exporter"
+          mkdir -p "$stage/About" "$stage/1.7/Assemblies"
+          cp About/About.xml "$stage/About/"
+          cp 1.7/Assemblies/DPA.CsvExporter.dll "$stage/1.7/Assemblies/"
+          cp README.md "$stage/"
+          ( cd "$RUNNER_TEMP/release" && zip -q -r "$GITHUB_WORKSPACE/DPA-CSV-Exporter-1.0.1-RW1.7.zip" DPA-CSV-Exporter )
+          unzip -t DPA-CSV-Exporter-1.0.1-RW1.7.zip
+          ! unzip -Z1 DPA-CSV-Exporter-1.0.1-RW1.7.zip | grep -E 'Assembly-CSharp\.dll|UnityStubs\.dll|Waylith\.dll|0Harmony\.dll|PerformanceAnalyzer\.dll'
+          unzip -p DPA-CSV-Exporter-1.0.1-RW1.7.zip DPA-CSV-Exporter/1.7/Assemblies/DPA.CsvExporter.dll | sha256sum
+          sha256sum 1.7/Assemblies/DPA.CsvExporter.dll
       - uses: actions/upload-artifact@v4
-        if: steps.check.outputs.ready == 'true'
         with:
-          name: DPA-CSV-Exporter-PR
-          path: DPA-CSV-Exporter-PR.zip
-          retention-days: 14
+          name: DPA-CSV-Exporter-1.0.1-PR
+          path: DPA-CSV-Exporter-1.0.1-RW1.7.zip
           if-no-files-found: error
-      - name: Delete private references
-        if: always()
-        shell: bash
-        run: rm -rf -- "$RUNNER_TEMP/rimworld-refs"
+          retention-days: 14
