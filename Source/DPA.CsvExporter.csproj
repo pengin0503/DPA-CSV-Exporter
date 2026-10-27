@@ -13,14 +13,8 @@
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Ludeon-authorized signature-only RimWorld 1.7 compile references; no R2 or game payload. -->
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.7.4985-unstable" PrivateAssets="all" />
     <PackageReference Include="Lib.Harmony" Version="3.0.0-rc.3" ExcludeAssets="runtime" />
-    <Reference Include="Assembly-CSharp"><HintPath>$(RimWorldRefs)/Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityStubs"><HintPath>$(RimWorldRefs)/UnityStubs.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="Waylith"><HintPath>$(RimWorldRefs)/Waylith.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
-  <Target Name="CheckRimWorldReferences" BeforeTargets="CoreCompile">
-    <Error Condition="!Exists('$(RimWorldRefs)/Assembly-CSharp.dll')" Text="Specify RimWorldRefs containing RimWorld 1.7 reference DLLs."/>
-    <Error Condition="!Exists('$(RimWorldRefs)/UnityStubs.dll')" Text="Missing UnityStubs.dll."/>
-    <Error Condition="!Exists('$(RimWorldRefs)/Waylith.dll')" Text="Missing Waylith.dll."/>
-  </Target>
 </Project>
