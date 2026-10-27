@@ -24,7 +24,7 @@ public sealed class DpaCsvExporterMod : Mod
                     return;
                 }
                 new Harmony("pengin0503.dpa.csvexporter").Patch(target,
-                    postfix: new HarmonyMethod(typeof(DpaCsvExporterMod), nameof(DrawExportButton)));
+                    prefix: new HarmonyMethod(typeof(DpaCsvExporterMod), nameof(DrawExportButton)));
                 Log.Message("[DPA CSV Exporter] Export CSV button attached.");
             }
             catch (Exception e)
@@ -48,16 +48,19 @@ public sealed class DpaCsvExporterMod : Mod
         Widgets.Label(new Rect(inner.x, inner.y + 125f, inner.width, Math.Max(90f, inner.height - 130f)), lastStatus);
     }
 
-    // Harmony postfix to an existing window; never patch the measured code paths.
-    public static void DrawExportButton(Rect inRect)
+    // Reserve a footer before DPA lays out its tabs, logs, graph and drag handles.
+    // A postfix overlay is too late: an underlying invisible tab button can
+    // consume the click and switch/clear the active profiler before we see it.
+    public static void DrawExportButton(ref Rect inRect)
     {
         try
         {
-            // Dubs uses the entire title strip (except its close button) for dragging.
-            // Place the export action below the title, near the foot of the left tabs.
-            // Keep the full-width analyzer search, TPS/FPS fields and draggable header clear.
-            if (inRect.width < 210f || inRect.height < 110f) return;
-            var button = new Rect(inRect.x + 24f, inRect.yMax - 48f, 168f, 25f);
+            const float footerHeight = 48f;
+            if (inRect.width < 210f || inRect.height < 110f + footerHeight) return;
+            var button = new Rect(inRect.x + 24f, inRect.yMax - 44f, 168f, 26f);
+            inRect.height -= footerHeight;
+            // Process input first; the original window receives only the remaining
+            // content rect, so its controls never occupy the export button's area.
             if (Widgets.ButtonText(button, "Export CSV"))
                 ExportWithFeedback();
         }

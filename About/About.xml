@@ -3,7 +3,7 @@
   <name>DPA CSV Exporter</name>
   <author>pengin0503</author>
   <packageId>pengin0503.dpa.csvexporter</packageId>
-  <modVersion>1.0.1</modVersion>
+  <modVersion>1.0.2</modVersion>
   <supportedVersions><li>1.7</li></supportedVersions>
   <modDependencies>
     <li><packageId>brrainz.harmony</packageId><displayName>Harmony</displayName></li>

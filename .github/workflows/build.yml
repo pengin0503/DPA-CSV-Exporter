@@ -6,6 +6,8 @@ on:
       - 'Source/**'
       - 'Tests/**'
       - 'About/**'
+      - 'README.md'
+      - 'RELEASE_NOTES.md'
       - '.github/workflows/build.yml'
       - '.github/workflows/pr-checks.yml'
   workflow_dispatch:
@@ -22,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: true
-          ref: main
+          ref: ${{ github.sha }}
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
@@ -31,6 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           dotnet run --project Tests/CsvSmokeTest.csproj -c Release
+          dotnet run --project Tests/Gui/GuiRegression.csproj -c Release
           dotnet build Source/DPA.CsvExporter.csproj -c Release --nologo
           test -s 1.7/Assemblies/DPA.CsvExporter.dll
       - name: Package only own DLL + About.xml + README
@@ -43,16 +46,16 @@ jobs:
           cp About/About.xml "$stage/About/"
           cp 1.7/Assemblies/DPA.CsvExporter.dll "$stage/1.7/Assemblies/"
           cp README.md "$stage/"
-          ( cd "$RUNNER_TEMP/dpa-release" && zip -q -r "$GITHUB_WORKSPACE/dist/DPA-CSV-Exporter-1.0.1-RW1.7.zip" DPA-CSV-Exporter )
-          unzip -t dist/DPA-CSV-Exporter-1.0.1-RW1.7.zip
-          ! unzip -Z1 dist/DPA-CSV-Exporter-1.0.1-RW1.7.zip | grep -E 'Assembly-CSharp\.dll|UnityStubs\.dll|Waylith\.dll|0Harmony\.dll|PerformanceAnalyzer\.dll'
-          unzip -p dist/DPA-CSV-Exporter-1.0.1-RW1.7.zip DPA-CSV-Exporter/1.7/Assemblies/DPA.CsvExporter.dll | sha256sum | cut -d' ' -f1 > "$RUNNER_TEMP/zip-dll.sha"
+          ( cd "$RUNNER_TEMP/dpa-release" && zip -q -r "$GITHUB_WORKSPACE/dist/DPA-CSV-Exporter-1.0.2-RW1.7.zip" DPA-CSV-Exporter )
+          unzip -t dist/DPA-CSV-Exporter-1.0.2-RW1.7.zip
+          ! unzip -Z1 dist/DPA-CSV-Exporter-1.0.2-RW1.7.zip | grep -E 'Assembly-CSharp\.dll|UnityStubs\.dll|Waylith\.dll|0Harmony\.dll|PerformanceAnalyzer\.dll'
+          unzip -p dist/DPA-CSV-Exporter-1.0.2-RW1.7.zip DPA-CSV-Exporter/1.7/Assemblies/DPA.CsvExporter.dll | sha256sum | cut -d' ' -f1 > "$RUNNER_TEMP/zip-dll.sha"
           sha256sum 1.7/Assemblies/DPA.CsvExporter.dll | cut -d' ' -f1 > "$RUNNER_TEMP/built-dll.sha"
           diff "$RUNNER_TEMP/zip-dll.sha" "$RUNNER_TEMP/built-dll.sha"
       - uses: actions/upload-artifact@v4
         with:
-          name: DPA-CSV-Exporter-1.0.1-RW1.7
-          path: dist/DPA-CSV-Exporter-1.0.1-RW1.7.zip
+          name: DPA-CSV-Exporter-1.0.2-RW1.7
+          path: dist/DPA-CSV-Exporter-1.0.2-RW1.7.zip
           if-no-files-found: error
           retention-days: 30
       - name: Commit verified DLL and ZIP to main
@@ -61,11 +64,43 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm -f --ignore-unmatch dist/DPA-CSV-Exporter-1.0.0-RW1.7.zip
-          git add 1.7/Assemblies/DPA.CsvExporter.dll dist/DPA-CSV-Exporter-1.0.1-RW1.7.zip
+          git rm -f --ignore-unmatch dist/DPA-CSV-Exporter-1.0.0-RW1.7.zip dist/DPA-CSV-Exporter-1.0.1-RW1.7.zip
+          git add 1.7/Assemblies/DPA.CsvExporter.dll dist/DPA-CSV-Exporter-1.0.2-RW1.7.zip
           if git diff --cached --quiet; then
             echo "DLL and ZIP already match the new build."
           else
-            git commit -m "build: publish verified DPA CSV Exporter 1.0.1"
+            git commit -m "build: publish verified DPA CSV Exporter 1.0.2"
             git push origin HEAD:main
           fi
+      - name: Publish installable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # --target does not move an existing tag. Resolve lightweight and
+          # annotated remote tags, and refuse a different source commit.
+          release_commit() {
+            git ls-remote origin 'refs/tags/v1.0.2' 'refs/tags/v1.0.2^{}' |
+              awk 'NR == 1 { sha = $1 } /\^\{\}$/ { sha = $1 } END { print sha }'
+          }
+          tag_commit="$(release_commit)"
+          if [ -n "$tag_commit" ] && [ "$tag_commit" != "$GITHUB_SHA" ]; then
+            echo "v1.0.2 points to another source commit; refusing to publish."
+            exit 1
+          fi
+          if ! gh release view v1.0.2 --json tagName >/dev/null 2>&1; then
+            gh release create v1.0.2 dist/DPA-CSV-Exporter-1.0.2-RW1.7.zip \
+              --target "$GITHUB_SHA" --title "DPA CSV Exporter 1.0.2 — reliable export button" \
+              --notes-file RELEASE_NOTES.md
+          fi
+          test "$(release_commit)" = "$GITHUB_SHA"
+          test "$(gh release view v1.0.2 --json isDraft --jq .isDraft)" = false
+          # A draft or missing/broken asset must not count as a published ZIP.
+          gh release download v1.0.2 --pattern DPA-CSV-Exporter-1.0.2-RW1.7.zip \
+            --dir "$RUNNER_TEMP/published-release"
+          published="$RUNNER_TEMP/published-release/DPA-CSV-Exporter-1.0.2-RW1.7.zip"
+          unzip -t "$published"
+          unzip -p "$published" DPA-CSV-Exporter/1.7/Assemblies/DPA.CsvExporter.dll |
+            sha256sum | cut -d' ' -f1 > "$RUNNER_TEMP/published-dll.sha"
+          diff "$RUNNER_TEMP/published-dll.sha" "$RUNNER_TEMP/built-dll.sha"
