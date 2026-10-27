@@ -19,6 +19,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - run: dotnet run --project Tests/CsvSmokeTest.csproj -c Release
+      - run: dotnet run --project Tests/Gui/GuiRegression.csproj -c Release
   compile:
     name: Build addon against public RimRef signatures (no R2)
     needs: tests
