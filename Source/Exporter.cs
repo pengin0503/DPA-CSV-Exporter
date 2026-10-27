@@ -133,6 +133,7 @@ public static class Exporter
             + "_" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".csv";
         string path = Path.Combine(folder, fileName);
 
+        string gameVersion = GameVersion();
         AtomicFile.Write(path, writer =>
         {
             writer.WriteLine(CsvFormat.Line(Header));
@@ -140,7 +141,7 @@ public static class Exporter
         {
             var row = rows[i];
             string?[] fields = {
-                timestamp, GameVersion(), category, entryName, filter,
+                timestamp, gameVersion, category, entryName, filter,
                 CsvFormat.Number(fps), CsvFormat.Number(tps), CsvFormat.Number(tpsTarget),
                 CsvFormat.Number(rootAverage), CsvFormat.Number(cycles), CsvFormat.Number(i+1),
                 row.Key, row.Label, row.Mod, row.Assembly, row.Type, row.Method,
