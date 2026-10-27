@@ -64,3 +64,43 @@ using (var sw = new System.IO.StringWriter())
         throw new Exception("Report must retain every row and quote text correctly");
 }
 Console.WriteLine("CSV precision, atomic file and full document tests passed");
+
+// Paired export must publish both completed files or roll back its own files.
+var pairDir = Path.Combine(Path.GetTempPath(), "dpa-pair-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(pairDir);
+var csvPath = Path.Combine(pairDir, "sample.csv");
+var jsonPath = Path.Combine(pairDir, "sample.json");
+void WritePair(Action<TextWriter> csv, Action<TextWriter> json)
+{
+    AtomicFile.WritePair(csvPath, csv, jsonPath, json);
+}
+void PairMustFail(Action<TextWriter> csv, Action<TextWriter> json)
+{
+    bool failed = false;
+    try { WritePair(csv, json); } catch (IOException) { failed = true; }
+    if (!failed) throw new Exception("Injected pair write failure must surface");
+    if (Directory.GetFiles(pairDir, "*.tmp").Length != 0) throw new Exception("Pair must remove failed staging files");
+}
+try
+{
+    PairMustFail(w => { w.Write("partial"); throw new IOException("CSV failure"); }, w => w.Write("{}"));
+    if (File.Exists(csvPath) || File.Exists(jsonPath)) throw new Exception("CSV failure must leave no final files");
+    PairMustFail(w => w.Write("complete"), w => { w.Write("partial"); throw new IOException("JSON failure"); });
+    if (File.Exists(csvPath) || File.Exists(jsonPath)) throw new Exception("JSON failure must leave no orphan CSV");
+    File.WriteAllText(csvPath, "old CSV");
+    PairMustFail(w => w.Write("new CSV"), w => w.Write("{}"));
+    Equal("old CSV", File.ReadAllText(csvPath));
+    if (File.Exists(jsonPath)) throw new Exception("Failed CSV publication must roll back new JSON");
+    File.Delete(csvPath);
+    File.WriteAllText(jsonPath, "old JSON");
+    PairMustFail(w => w.Write("new CSV"), w => w.Write("{}"));
+    Equal("old JSON", File.ReadAllText(jsonPath));
+    if (File.Exists(csvPath)) throw new Exception("JSON collision must not publish CSV");
+    File.Delete(jsonPath);
+    WritePair(w => w.Write("complete CSV"), w => w.Write("{}"));
+    Equal("complete CSV", File.ReadAllText(csvPath));
+    Equal("{}", File.ReadAllText(jsonPath));
+    if (Directory.GetFiles(pairDir).Length != 2) throw new Exception("Successful pair leaves exactly CSV and JSON");
+    Console.WriteLine("Paired export success, failure rollback and pre-existing-file protection passed");
+}
+finally { Directory.Delete(pairDir, true); }

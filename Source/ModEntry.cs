@@ -42,10 +42,11 @@ public sealed class DpaCsvExporterMod : Mod
         Widgets.Label(new Rect(inner.x, inner.y, inner.width, 65f),
             "Open Dubs Performance Analyzer and select a Tick, Update, GUI, or other profiler entry.\n" +
             "Export all rows in the active profiler, including rows hidden by its search filter.\n" +
-            "CSV folder: RimWorld user data / AnalyzerExports");
+            "CSV + environment JSON: RimWorld user data / AnalyzerExports");
         if (Widgets.ButtonText(new Rect(inner.x, inner.y + 75f, 250f, 34f), "Export all current measurements"))
             ExportWithFeedback();
-        Widgets.Label(new Rect(inner.x, inner.y + 125f, inner.width, Math.Max(90f, inner.height - 130f)), lastStatus);
+        DrawFolderActions(new Rect(inner.x, inner.y + 121f, inner.width, 30f));
+        Widgets.Label(new Rect(inner.x, inner.y + 165f, inner.width, Math.Max(90f, inner.height - 170f)), lastStatus);
     }
 
     // Reserve a footer before DPA lays out its tabs, logs, graph and drag handles.
@@ -63,10 +64,39 @@ public sealed class DpaCsvExporterMod : Mod
             // content rect, so its controls never occupy the export button's area.
             if (Widgets.ButtonText(button, "Export CSV"))
                 ExportWithFeedback();
+            if (inRect.width >= 458f)
+                DrawFolderActions(new Rect(inRect.x + 204f, button.y, 236f, button.height));
         }
         catch (Exception e)
         {
             Log.ErrorOnce("[DPA CSV Exporter] Export GUI error: " + e, 172890412);
+        }
+    }
+
+    private static void DrawFolderActions(Rect rect)
+    {
+        if (rect.width <= 12f) return;
+        float width = Math.Min(160f, (rect.width - 12f) / 2f);
+        if (Widgets.ButtonText(new Rect(rect.x, rect.y, width, rect.height), "Open folder"))
+            FolderAction(open: true);
+        if (Widgets.ButtonText(new Rect(rect.x + width + 12f, rect.y, width, rect.height), "Copy path"))
+            FolderAction(open: false);
+    }
+
+    private static void FolderAction(bool open)
+    {
+        try
+        {
+            if (open) OutputFolder.Open();
+            else GUIUtility.systemCopyBuffer = OutputFolder.Path;
+            lastStatus = (open ? "Opened folder: " : "Copied folder path: ") + OutputFolder.Path;
+            if (!open) Messages.Message("DPA export folder path copied.", MessageTypeDefOf.TaskCompletion, false);
+        }
+        catch (Exception e)
+        {
+            lastStatus = "Folder action failed: " + e.Message;
+            Log.Warning("[DPA CSV Exporter] " + lastStatus);
+            Messages.Message(lastStatus, MessageTypeDefOf.RejectInput, false);
         }
     }
 
@@ -75,9 +105,9 @@ public sealed class DpaCsvExporterMod : Mod
         try
         {
             var path = Exporter.ExportCurrent();
-            lastStatus = "Saved: " + path;
-            Log.Message("[DPA CSV Exporter] Saved: " + path);
-            Messages.Message("DPA CSV saved: " + System.IO.Path.GetFileName(path),
+            lastStatus = "Saved CSV: " + path + "\nEnvironment JSON: " + System.IO.Path.ChangeExtension(path, ".json");
+            Log.Message("[DPA CSV Exporter] " + lastStatus);
+            Messages.Message("DPA CSV + environment JSON saved: " + System.IO.Path.GetFileName(path),
                 MessageTypeDefOf.TaskCompletion, false);
         }
         catch (Exception e)

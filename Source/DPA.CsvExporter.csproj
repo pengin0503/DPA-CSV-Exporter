@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <AssemblyName>DPA.CsvExporter</AssemblyName>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <OutputPath>../1.7/Assemblies/</OutputPath>

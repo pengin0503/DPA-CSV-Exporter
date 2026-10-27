@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 namespace UnityEngine
 {
+    public static class GUIUtility { public static string systemCopyBuffer = ""; }
     public struct Rect(float x, float y, float width, float height)
     {
         public float x = x, y = y, width = width, height = height;
@@ -27,11 +28,12 @@ namespace Verse
     public static class Log
     {
         public static void Message(string text) { }
-        public static void Warning(string text) => throw new Exception(text);
+        public static string LastWarning = "";
+        public static void Warning(string text) { LastWarning = text; }
         public static void Error(string text) => throw new Exception(text);
         public static void ErrorOnce(string text, int key) => throw new Exception(text);
     }
-    public static class Messages { public static void Message(string text, object type, bool historical) { } }
+    public static class Messages { public static string LastText = ""; public static void Message(string text, object type, bool historical) { LastText = text; } }
     public static class RectExtensions
     {
         public static Rect ContractedBy(this Rect r, float n) => new(r.x+n, r.y+n, r.width-2*n, r.height-2*n);
@@ -41,9 +43,11 @@ namespace Verse
         public static float MouseX, MouseY;
         public static bool Click;
         public static Rect? ExportButton;
+        public static readonly Dictionary<string,Rect> Buttons = new();
         public static void Label(Rect rect, string text) { }
         public static bool ButtonText(Rect rect, string text)
         {
+            Buttons[text] = rect;
             if (text == "Export CSV") ExportButton = rect;
             return ButtonInvisible(rect);
         }
@@ -57,6 +61,13 @@ namespace Verse
 }
 namespace DpaCsvExporter
 {
+    public static class OutputFolder
+    {
+        public static string Path => "/tmp/DPA exports & 日本語";
+        public static int OpenCalls;
+        public static bool FailOpen;
+        public static void Open() { OpenCalls++; if (FailOpen) throw new System.IO.IOException("simulated OS failure"); }
+    }
     public static class Exporter
     {
         public static int Exports;
