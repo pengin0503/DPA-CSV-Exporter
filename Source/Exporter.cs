@@ -21,9 +21,10 @@ public static class Exporter
     private sealed class Row
     {
         public string Key = "", Label = "", Mod = "", Assembly = "", Type = "", Method = "";
-        public int Entries, Spikes, Severity, Phase;
+        public int Entries;
+        public int? Spikes, Severity, Phase;
         public double Average, Self, Max, Total, Calls, Fraction;
-        public bool Pinned;
+        public bool? Pinned;
     }
 
     private static Type RequireType(string name)
@@ -47,11 +48,13 @@ public static class Exporter
     private static int Int(object? value) => value == null ? 0 : Convert.ToInt32(value, CultureInfo.InvariantCulture);
     private static double Num(object? value) => value == null ? 0 : Convert.ToDouble(value, CultureInfo.InvariantCulture);
 
+    private static int? OptionalInt(object? value) => value == null ? null : Int(value);
+    private static string OptionalNumber(int? value) => value.HasValue ? CsvFormat.Number(value.Value) : "";
+
     public static string ExportCurrent()
     {
         var analyzer = RequireType("Analyzer.Profiling.Analyzer");
         var gui = RequireType("Analyzer.Profiling.GUIController");
-        var controller = RequireType("Analyzer.Profiling.ProfileController");
         var toolbar = RequireType("Analyzer.Profiling.Panel_TopRow");
         object? entry = Static(gui, "CurrentEntry");
         string category = Str(Static(gui, "CurrentCategory"));
@@ -76,9 +79,10 @@ public static class Exporter
         foreach (object item in sampledLogs)
         {
                 if (item == null) continue;
-                var method = Field(item, "meth") as MethodBase;
+                var schema = DpaLogSchema.For(item.GetType());
+                var method = schema.Read(item, "meth") as MethodBase;
                 // A profiler wrapper type is not necessarily the measured method's owner.
-                var type = method?.DeclaringType ?? Field(item, "type") as Type;
+                var type = method?.DeclaringType ?? schema.Read(item, "type") as Type;
                 string assFull = type?.Assembly.FullName ?? "";
                 string mod = "";
                 if (assFull.Length > 0 && modMap.TryGetValue(assFull, out var known))
@@ -86,20 +90,20 @@ public static class Exporter
                 else if (assFull.StartsWith("Assembly-CSharp,", StringComparison.Ordinal))
                     mod = "RimWorld Core";
                 rows.Add(new Row {
-                    Key = Str(Field(item, "key")), Label = Str(Field(item, "label")), Mod = mod,
+                    Key = Str(schema.Read(item, "key")), Label = Str(schema.Read(item, "label")), Mod = mod,
                     Assembly = type?.Assembly.GetName().Name ?? "", Type = type?.FullName ?? "",
                     Method = method?.ToString() ?? "",
-                    Entries = Int(Field(item, "entries")),
-                    Average = Num(Field(item, "average")),
-                    Self = Num(Field(item, "self")),
-                    Max = Num(Field(item, "max")),
-                    Total = Num(Field(item, "total")),
-                    Calls = Num(Field(item, "calls")),
-                    Fraction = Num(Field(item, "percent")),
-                    Spikes = Int(Field(item, "spikes")),
-                    Severity = Int(Field(item, "spike")),
-                    Phase = Int(Field(item, "seenIn")),
-                    Pinned = Field(item, "pinned") is true
+                    Entries = Int(schema.Read(item, "entries")),
+                    Average = Num(schema.Read(item, "average")),
+                    Self = Num(schema.Read(item, "self")),
+                    Max = Num(schema.Read(item, "max")),
+                    Total = Num(schema.Read(item, "total")),
+                    Calls = Num(schema.Read(item, "calls")),
+                    Fraction = Num(schema.Read(item, "percent")),
+                    Spikes = OptionalInt(schema.Read(item, "spikes")),
+                    Severity = OptionalInt(schema.Read(item, "spike")),
+                    Phase = OptionalInt(schema.Read(item, "seenIn")),
+                    Pinned = schema.Read(item, "pinned") as bool?
                 });
         }
         if (rows.Count == 0)
@@ -110,8 +114,6 @@ public static class Exporter
         string entryName = Str(Field(entry, "name"));
         int fps = Int(Static(toolbar, "fps")), tps = Int(Static(toolbar, "tps"));
         int tpsTarget = Int(Static(toolbar, "tpsTarget"));
-        double rootAverage = Num(Static(controller, "updateAverage"));
-        int cycles = Int(Static(analyzer, "GetCurrentLogCount"));
         string filter = Str(Static(toolbar, "TimesFilter"));
 
         string folder = Path.Combine(GenFilePaths.SaveDataFolderPath, "AnalyzerExports");
@@ -129,15 +131,17 @@ public static class Exporter
             string?[] fields = {
                 timestamp, gameVersion, category, entryName, filter,
                 CsvFormat.Number(fps), CsvFormat.Number(tps), CsvFormat.Number(tpsTarget),
-                CsvFormat.Number(rootAverage), CsvFormat.Number(cycles), CsvFormat.Number(i+1),
+                // DPA does not publish the root average associated with this batch.
+                // Unknown stays empty; never substitute live state or infer a ratio.
+                "", CsvFormat.Number(row.Entries), CsvFormat.Number(i+1),
                 row.Key, row.Label, row.Mod, row.Assembly, row.Type, row.Method,
                 CsvFormat.Number(row.Entries), CsvFormat.Number(row.Average),
                 CsvFormat.Number(row.Self), CsvFormat.Number(row.Max), CsvFormat.Number(row.Total),
                 CsvFormat.Number(row.Calls),
                 CsvFormat.Number(row.Entries == 0 ? 0 : row.Calls / row.Entries),
-                CsvFormat.Number(row.Fraction), CsvFormat.Number(row.Spikes),
-                CsvFormat.Number(row.Severity), CsvFormat.Number(row.Phase),
-                row.Pinned ? "1" : "0"
+                CsvFormat.Number(row.Fraction), OptionalNumber(row.Spikes),
+                OptionalNumber(row.Severity), OptionalNumber(row.Phase),
+                row.Pinned.HasValue ? (row.Pinned.Value ? "1" : "0") : ""
             };
             csvRows.Add(fields);
         }
