@@ -2,7 +2,7 @@
 
 An independent addon for **Dubs Performance Analyzer** that exports the **entire current profiling table** in one CSV file, including rows hidden by the Dubs search filter. It does not start extra profiling or modify game behavior.
 
-**Status:** Builds successfully against genuine RimWorld 1.7 reference DLLs; CSV serializer tests passed. **The visual button and real CSV generation in a running Windows game have not yet been verified.**
+**Status:** The `main` branch's compiled DLL and ZIP are the *pre-review* build. **This review-fix branch contains newer source changes; the tracked DLL and `dist/` ZIP have not yet been rebuilt**. Do not treat them as verified binaries for the changes here. Real Windows in-game button/CSV export still requires verification.
 
 ## Installation
 
@@ -35,3 +35,10 @@ dotnet build Source/DPA.CsvExporter.csproj -c Release -p:RimWorldRefs=/private/R
 The compile references must be `Assembly-CSharp.dll`, `UnityStubs.dll`, and `Waylith.dll` from an authorized RimWorld 1.7 installation; these proprietary files are **not** tracked or packaged here.
 
 Built from the [DPA CSV Exporter focused-build run](https://github.com/pengin0503/RimWorld-for-mod-test/actions/runs/40447166070). The unrelated test-only RimWorld host is not required to run this addon.
+
+## Review-fix branch notes
+
+- The CSV exporter serializes complete current-entry measurement rows using `CsvReport.Write`, and writes atomically via `AtomicFile`.
+- Tests now also cover precision, a multi-row 29-column CSV report and failed file writes (not yet executed against a .NET 10 runner in this branch).
+- Important: only use a newly built artifact after reviewing/fixing the remaining issues. A green pre-review build does not prove this branch is compiled or playable.
+- Rebuilding requires `RimWorldRefs` to point to privately held, authorized RimWorld 1.7 references. Do not commit or upload those references.
