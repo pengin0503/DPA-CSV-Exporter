@@ -116,7 +116,7 @@ public static class Exporter
         int tpsTarget = Int(Static(toolbar, "tpsTarget"));
         string filter = Str(Static(toolbar, "TimesFilter"));
 
-        string folder = Path.Combine(GenFilePaths.SaveDataFolderPath, "AnalyzerExports");
+        string folder = OutputFolder.Path;
         Directory.CreateDirectory(folder);
         string fileName = now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture)
             + "_" + SafeName(category) + "_" + SafeName(entryName)
@@ -145,7 +145,10 @@ public static class Exporter
             };
             csvRows.Add(fields);
         }
-        AtomicFile.Write(path, writer => CsvReport.Write(writer, csvRows));
+        var environment = EnvironmentReport.Capture(timestamp, gameVersion, analyzer.Assembly);
+        string json = EnvironmentReport.Serialize(environment);
+        AtomicFile.WritePair(path, writer => CsvReport.Write(writer, csvRows),
+            Path.ChangeExtension(path, ".json"), writer => writer.Write(json));
         return path;
     }
 

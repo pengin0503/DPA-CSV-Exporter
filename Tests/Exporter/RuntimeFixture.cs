@@ -2,12 +2,16 @@ using System.Reflection;
 namespace Verse
 {
     public static class GenFilePaths { public static string SaveDataFolderPath = ""; }
-    public static class LoadedModManager { public static IEnumerable<ModFixture> RunningMods => Array.Empty<ModFixture>(); }
+    public static class LoadedModManager { public static IEnumerable<ModFixture> RunningMods { get; set; } = Array.Empty<ModFixture>(); }
     public sealed class ModFixture
     {
         public string Name = "Fixture";
+        public string PackageId = "fixture.mod";
+        public int loadOrder;
+        public ModMetaData? ModMetaData;
         public Assemblies assemblies = new();
     }
+    public sealed class ModMetaData { public string? ModVersion; }
     public sealed class Assemblies { public List<Assembly> loadedAssemblies = new(); }
 }
 namespace Analyzer.Profiling

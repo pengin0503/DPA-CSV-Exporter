@@ -109,6 +109,41 @@ tests.Add(("in-flight calculation cannot contaminate published row metadata", ()
     }
     finally { publish.Set(); worker.GetAwaiter().GetResult(); }
 }));
+tests.Add(("environment JSON accompanies CSV with matching context", () => {
+    var original = Verse.LoadedModManager.RunningMods;
+    try
+    {
+        Verse.LoadedModManager.RunningMods = new[] {
+            new Verse.ModFixture { Name = "先頭MOD", PackageId = "example.first", loadOrder = 3 },
+            new Verse.ModFixture { Name = "DPA 日本語 \"quoted\"", PackageId = "dubwise.dubsperformanceanalyzer.steam", loadOrder = 7,
+                ModMetaData = new Verse.ModMetaData { ModVersion = "2.3-test" },
+                assemblies = new Verse.Assemblies { loadedAssemblies = new() { typeof(Dpa.Analyzer).Assembly } } }
+        };
+        Dpa.Analyzer.Logs = new() { new Dpa.ProfileLog() };
+        string csv = Exporter.ExportCurrent();
+        string json = Path.ChangeExtension(csv, ".json");
+        Check(File.Exists(json), "A successful export must include its environment JSON");
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(json));
+        var env = doc.RootElement;
+        var row = File.ReadAllLines(csv)[1].Split(',');
+        Check(env.GetProperty("schemaVersion").GetInt32() == 1, "Environment schema version required");
+        Check(env.GetProperty("capturedAtUtc").GetString() == row[0], "JSON/CSV timestamps must match");
+        Check(env.GetProperty("gameVersion").GetString() == row[1], "JSON/CSV game builds must match");
+        Check(!string.IsNullOrEmpty(env.GetProperty("exporterAssemblyVersion").GetString()), "Exporter version required");
+        var mods = env.GetProperty("enabledMods");
+        Check(mods.GetArrayLength() == 2, "Record every enabled mod");
+        Check(mods[0].GetProperty("name").GetString() == "先頭MOD" && mods[0].GetProperty("loadOrder").GetInt32() == 3,
+            "Preserve Unicode and actual engine load order");
+        Check(mods[0].GetProperty("modVersion").ValueKind == System.Text.Json.JsonValueKind.Null, "Undeclared version stays unknown");
+        Check(mods[1].GetProperty("name").GetString() == "DPA 日本語 \"quoted\"" && mods[1].GetProperty("packageId").GetString() == "dubwise.dubsperformanceanalyzer.steam",
+            "JSON must preserve quotes and PackageId");
+        Check(env.GetProperty("dpa").GetProperty("modVersion").GetString() == "2.3-test", "DPA declared version required");
+        Check(env.GetProperty("dpa").GetProperty("assemblyVersion").GetString() == typeof(Dpa.Analyzer).Assembly.GetName().Version?.ToString(),
+            "DPA assembly version must be identified separately");
+        Check(row.Length == 29, "Sidecar must not change CSV columns");
+    }
+    finally { Verse.LoadedModManager.RunningMods = original; }
+}));
 int failed = 0;
 try
 {
