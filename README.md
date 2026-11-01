@@ -17,49 +17,6 @@ Normally on Windows this is `%USERPROFILE%\AppData\LocalLow\Ludeon Studios\RimWo
 
 Each CSV contains 29 columns: category, selected entry, FPS/TPS, measured call counts, average/self/max/total execution time, method/assembly and best-effort MOD attribution, etc. UTF-8 with BOM for Excel. The export saves **one selected profiling entry** at a time, not every category simultaneously.
 
-## Source and testing
-
-- `Source/`: addon C# code (net10.0) and compiler project.
-- `Tests/`: CSV formatting tests; `Tests/Gui/` runs the real addon patch with real Harmony and test-only UI boundaries.
-- `1.7/Assemblies/`: compiled and redistributable addon DLL (no game, Harmony, or Dubs DLL bundled).
-- `dist/`: ready-to-install ZIP archive.
-- `.github/workflows/pr-checks.yml`: runs CSV regression tests and compiles a test ZIP using `Krafs.Rimworld.Ref` from NuGet on pull requests. No R2 access required.
-- `.github/workflows/build.yml`: on main source changes or manual dispatch, runs tests, compiles and validates the 1.0.4 ZIP, then commits only the self-authored DLL and ZIP to the repo and publishes a versioned GitHub Release asset. No R2 access required.
-
-Local development:
-
-```sh
-dotnet run --project Tests/CsvSmokeTest.csproj -c Release
-dotnet run --project Tests/Gui/GuiRegression.csproj -c Release
-dotnet run --project Tests/Exporter/ExporterRegression.csproj -c Release
-dotnet build Source/DPA.CsvExporter.csproj -c Release
-```
-
-The compiler restores the Ludeon-authorized, signature-only `Krafs.Rimworld.Ref` 1.7.4985 NuGet package. The actual game binaries are **not** tracked or packaged here.
-
-The original v1.0.0 build came from a prior CI run in a separate repository. Current source and v1.0.3 builds use no game files or R2 credentials.
-
-## Review fixes and release boundaries
-
-- The CSV exporter serializes complete current-entry measurement rows using `CsvReport.Write`, and writes atomically via `AtomicFile`.
-- Tests cover precision, a multi-row 29-column CSV report and failed file writes, and pass in the independent .NET 10 GitHub Actions job.
-- The v1.0.3 `dist/` ZIP is published by the main-branch build workflow after a .NET compiler success. This does not prove that the addon UI functions in a running game.
-- Rebuilding uses publicly available metadata-only NuGet references. Do not commit or upload proprietary game DLLs.
-
-## 1.0.2 input fix
-
-The export action now occupies a reserved 48-pixel bottom toolbar. A Harmony prefix draws and processes the button before the original window, which receives a smaller content rectangle. Tick/Update entries, graphs and their drag handles no longer sit underneath the export button. The previous postfix could lose the click to an invisible entry button before export ran. The addon settings export remains available.
-
-Regression tests reproduce the old failure and cover entry retention, navigation, repaint, window sizes and nonzero origins. They exercise the actual patch with Harmony using test-only UI fixtures; they do not run Unity or prove in-game rendering.
-
-## 1.0.3 CSV integrity fixes
-
-Required public ProfileLog fields and their types are validated once per runtime type before creating a file. An incompatible DPA model produces a named compatibility error and no CSV; genuine measured zeros are retained. Missing optional row metadata (method/type/labels, spike metadata, phase and pin state) is blank rather than a fabricated zero or false. Present optional fields with an incompatible type are rejected as well.
-
-The 29 column names and order are unchanged. `measurement_cycles` now comes from each published row's `entries`, matching `sample_entries`, rather than the live counter which can be ahead of that batch. **`root_average_ms` is empty/unknown in 1.0.3**: the supplied DPA 1.7 API does not publish the root average belonging to its completed Logs batch. The exporter neither substitutes a live value nor infers an approximate root from the rounded fraction. `fraction_of_root` remains the actual published DPA value. FPS/TPS, TPS target and search filter are live context at export, not synchronized batch metadata.
-
-Tests execute the production Exporter with DPA-compatible models: missing or wrong-typed required fields, unknown optional metadata, real zero values, retained DPA 1.7 measurements, and a deterministically blocked asynchronous publication whose live counters have already advanced. This verifies the export logic without running the game.
-
 ## 1.0.4 environment and output-folder tools
 
 Each explicit export produces `name.csv` and `name.json`. JSON schema version 1 contains the same UTC timestamp and game build as the CSV, exporter assembly version, DPA assembly version and declared mod version when available, and enabled mods with their name, runtime PackageId, declared mod version and engine load order. Missing version/owner metadata is null, rather than guessed. The 29 CSV columns remain unchanged. Keep both files together when sharing a result.
@@ -69,3 +26,14 @@ The two complete files are staged before publication; JSON is published first an
 **Open folder** and **Copy path** appear in addon settings and in the reserved DPA footer when it has enough width. Narrow DPA windows retain Export CSV; use addon settings for folder actions. Open creates the output directory if necessary and asks the OS to open it; Copy uses the clipboard without launching a process. If the OS/clipboard is unavailable, the addon reports the failure in settings and a notification.
 
 This release does not add multi-entry batch capture. DPA resets previous measurements when switching entries, so collecting several entries would require a separate capture workflow.
+
+## 日本語
+
+DPA CSV Exporterは、RimWorld 1.7のDubs Performance Analyzerで選択中の計測表全体をCSVに保存するアドオンです。検索で非表示の行も含みます。追加の計測開始やゲーム動作の変更は行いません。Windowsの実ゲームでの画面とCSV出力は未検証です。
+
+1. [v1.0.4の配布ページ](https://github.com/pengin0503/DPA-CSV-Exporter/releases/tag/v1.0.4)から `DPA-CSV-Exporter-1.0.4-RW1.7.zip` を取得し、展開したフォルダを `RimWorld/Mods` に置きます。
+2. Harmony、Dubs Performance Analyzer、このアドオンの順に有効化します。
+3. DPAでTickやUpdateなどの項目を選び、計測後に下部の **Export CSV** を押します。設定画面の予備ボタンも使えます。
+4. CSVと同名の環境情報JSONが `AnalyzerExports` に保存されます。共有時は両方を一緒に扱ってください。CSVは選択中の1項目について29列を出力します。複数項目の同時出力には対応していません。
+
+設定画面には保存先を開く・パスをコピーする操作があります。計測値の0はそのまま保存され、不明な一部の値は空欄になります。FPS/TPSなどの表示は出力時点の情報です。
